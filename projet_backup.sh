@@ -40,7 +40,7 @@ function checkPackageInstalled() {
 }
 
 
-Package=('dialog' 'xdialog' 'rsync' 'openssh')
+Package=('dialog' 'xdialog' 'rsync' 'openssh' 'sshfs')
 # echo ${Package[@]}
 checkPackageInstalled ${Package[@]}
 
@@ -63,26 +63,154 @@ installPackage ${not_installed_package[@]}
 
 
 if [ -z $DISPLAY ]
-   then
-      DIALOG=dialog
-   else
-      DIALOG=Xdialog
+then
+    DIALOG=dialog
+else
+    DIALOG=Xdialog
 fi
 
-fichtemp=`tempfile 2>/dev/null` || fichtemp=/tmp/test$$
-trap "rm -f $fichtemp" 0 1 2 5 15
-$DIALOG --clear --title "Mon chanteur français favori" \
-	--menu "Bonjour, choisissez votre chanteur français favori :" 20 51 4 \
-	 "Brel" "Jacques Brel" \
-	 "Aznavour" "Charles Aznavour" \
- 	 "Brassens" "Georges Brassens" \
-	 "Nougaro" "Claude Nougaro" \
-	 "Souchon" "Alain Souchon" \
-	 "Balavoine" "Daniel Balavoine" 2> $fichtemp
-valret=$?
-choix=`cat $fichtemp`
-case $valret in
- 0)	echo "'$choix' est votre chanteur français préféré";;
- 1) 	echo "Appuyé sur Annuler.";;
-255) 	echo "Appuyé sur Echap.";;
-esac
+function backupDir() {
+    fichtemp=`tempfile 2>/dev/null` || fichtemp=/tmp/projet$$
+    trap "rm -f $fichtemp" 0 1 2 5 15
+    $DIALOG --clear --title "Backup Choice" \
+    --menu "Bonjour $(whoami) : Que souhaitez vous faire?" 20 100 4 \
+    "LocalToLocal" "Sauvegarder source local sur destination locale" \
+    "LocalToDistant" "Sauvegarder source local sur destination distante" \
+    "DistantToDistant" "Sauvegarder source distante sur destination distante" \
+    "DistantToLocal" "Sauvegarder source distante sur destination locale" 2> $fichtemp
+    valret=$?
+    choix_backupDir=`cat $fichtemp`
+    case $valret in
+        0)	echo "'$choix_backupDir' est choix";;
+        1) 	echo "Appuyé sur Annuler.";;
+        255) 	echo "Appuyé sur Echap.";;
+    esac
+}
+
+function backup() {
+    fichtemp=`tempfile 2>/dev/null` || fichtemp=/tmp/projet$$
+    trap "rm -f $fichtemp" 0 1 2 5 15
+    $DIALOG --clear --title "Backup Choice" \
+    --menu "Bonjour $(whoami) : Que souhaitez vous faire?" 20 100 4 \
+    "LocalToLocal" "Sauvegarder source locale sur destination locale" \
+    "LocalToDistant" "Sauvegarder source locale sur destination distante" \
+    "DistantToDistant" "Sauvegarder source distante sur destination distante" \
+    "DistantToLocal" "Sauvegarder source distante sur destination locale" 2> $fichtemp
+    valret=$?
+    choix_backup=`cat $fichtemp`
+    case $valret in
+        0)	echo "'$choix_backup' est choix";;
+        1) 	echo "Appuyé sur Annuler.";;
+        255) 	echo "Appuyé sur Echap.";;
+    esac
+}
+
+# backupDir
+# backup
+# echo $choix_backup
+
+
+function choiceFolder() {
+    folder=`$DIALOG --stdout --title "Choisissez un dossier" --fselect $HOME/ 60 150`
+
+    if [[ $1 == "sourceFolderLocal" ]]; then
+        sourceFolderLocal=$folder
+    elif [[ $1 == "distantFolderLocal" ]]; then
+        distantFolderLocal=$folder
+    fi
+
+    case $? in
+        0)
+        echo "\"$folder\" choisi";;
+        1)
+        echo "Appuyé sur Annuler.";;
+        255)
+        echo "Fenêtre fermée.";;
+    esac
+}
+
+# choiceFolder "sourceFolderLocal"
+# choiceFolder "distantFolderLocal"
+# echo $sourceFolderLocal
+# echo $distantFolderLocal
+
+
+function connectSshfs() {
+    fichtemp=`tempfile 2>/dev/null` || fichtemp=/tmp/projet$$
+    trap "rm -f $fichtemp" 0 1 2 5 15
+    $DIALOG --title "$1" --clear \
+    --inputbox "$2:" 16 51 2> $fichtemp
+
+    valret=$?
+
+    case $valret in
+        0)
+        echo "`cat $fichtemp`";;
+        1)
+        echo "";;
+        255)
+        if test -s $fichtemp ; then
+            cat $fichtemp
+        else
+            echo ""
+        fi
+        ;;
+    esac
+}
+
+function checkIfDistantFolderIsMount() {
+    mount=`ls $1 2>/dev/null`
+    local folder=$1
+    result=$?
+    if [[ $result -eq 0 ]]; then
+        echo "le dossier existe"
+        if [ ${#folder[@]} -gt 0 ]; then
+            `sudo umount $1`
+        fi
+    else
+        echo "le dossier n'existe pas"
+        mk=`mkdir $1`
+        result=$?
+        if [[ $result != 0 ]]; then
+            echo "Vérifie tes droits dans le dossier ou te trouve afin de créer un répertoire"
+        else
+            echo "le dossier distantFolder a bien été créé"
+        fi
+    fi
+
+    port=`connectSshfs "Port" "Donner votre port de connection en ssh"`
+    name=`connectSshfs "Name" "Donner votre nom de connection en ssh"`
+    host=`connectSshfs "Host" "Donner votre adresse de connection en ssh"`
+    folder=`connectSshfs "Folder" "Donner votre dossier de connection en ssh"`
+
+    echo "$port"
+
+    if [[ $port != "" && $name != "" && $host != "" && $folder != "" ]]; then
+        mount=`sshfs -p$port $name@$host:$folder $1`
+        echo $mount
+    fi
+}
+
+checkIfDistantFolderIsMount "distantFolderOne"
+checkIfDistantFolderIsMount "distantFolderTwo"
+
+function choiceFolderDistant() {
+    folder=`$DIALOG --stdout --title "Choisissez un dossier" --fselect $HOME/ 60 150`
+
+    if [[ $1 == "sourceFolderLocal" ]]; then
+        sourceFolderLocal=$folder
+    elif [[ $1 == "distantFolderLocal" ]]; then
+        distantFolderLocal=$folder
+    fi
+
+    case $? in
+        0)
+        echo "\"$folder\" choisi";;
+        1)
+        echo "Appuyé sur Annuler.";;
+        255)
+        echo "Fenêtre fermée.";;
+    esac
+}
+
+# umount=`umount distantFolderOne & umount distantFolderTwo`
