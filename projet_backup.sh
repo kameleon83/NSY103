@@ -31,7 +31,6 @@ function checkPackageInstalled() {
             x=`pacman -Q $p 2> /dev/null`
         fi
 
-
         if [[ ! ${x} ]]; then
             # false
             not_installed_package=("${not_installed_package[@]}" "$p")
@@ -47,14 +46,15 @@ checkPackageInstalled ${Package[@]}
 function installPackage() {
     for i in $1; do
         checkDistib
+        echo "Installation de $i"
         if [[ ${OS} == "Debian" ]]; then
-            x=`sudo apt install $i`
+            x=`sudo apt-get install $i 2>/dev/null`
         elif [[ ${OS} == "Ubuntu" ]]; then
-            x=`sudo apt install $i`
+            x=`sudo apt-get install $i 2>/dev/null`
         elif [[ ${OS} == "ManjaroLinux" ]]; then
-            x=`sudo pacman -S $i`
+            x=`sudo pacman -S $i 2>/dev/null`
         elif [[ ${OS} == "Arch" ]]; then
-            x=`sudo pacman -S $i`
+            x=`sudo pacman -S $i 2>/dev/null`
         fi
     done
 }
@@ -145,9 +145,9 @@ function backup() {
     esac
 }
 
-# backupDir
-# backup
-# echo $choix_backup
+backupDir
+backup
+echo $choix_backup
 
 
 function choiceFolder() {
