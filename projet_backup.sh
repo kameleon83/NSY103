@@ -40,7 +40,7 @@ function checkPackageInstalled() {
 }
 
 
-Package=('dialog' 'xdialog' 'rsync' 'openssh' 'sshfs')
+Package=('dialog' 'xdialog' 'rsync' 'openssh' 'sshfs') 
 # echo ${Package[@]}
 checkPackageInstalled ${Package[@]}
 
@@ -69,15 +69,55 @@ else
     DIALOG=Xdialog
 fi
 
+function msgBox() {
+    $DIALOG --title "$1" --msgbox "$2" 20 60
+}
+
+function passBox() {
+    fichtemp=`tempfile 2>/dev/null` || fichtemp=/tmp/projet$$
+    trap "rm -f $fichtemp" 0 1 2 5 15
+    # get password
+    $DIALOG --title "Password" \
+        --clear \
+        --passwordbox "Je vais avoir besoin de ton mot de passe\npour pouvoir continuer le programme." 20 60 2> $fichtemp
+
+    ret=$?
+
+    # make decision
+    case $ret in
+        0)
+            passwordUser=`cat $fichtemp`;;
+        1)
+            echo "Cancel pressed." && exit;;
+        255)
+           exit;;
+    esac
+}
+
+passBox
+
+function bonjour() {
+    $DIALOG --title "Bonjour $(whoami)" --clear \
+        --yesno "Bonjour $(whoami), comment vas tu?\n\nAlors comment ça tu veux faire un backup ?" 20 60
+
+    case $? in
+        0)	echo "Oui choisi. ";;
+        1)	echo "Non choisi. " && exit;;
+        255)	echo "Appuyé sur Echap. " && exit;;
+    esac
+}
+
+bonjour
+
 function backupDir() {
     fichtemp=`tempfile 2>/dev/null` || fichtemp=/tmp/projet$$
     trap "rm -f $fichtemp" 0 1 2 5 15
     $DIALOG --clear --title "Backup Choice" \
-    --menu "Bonjour $(whoami) : Que souhaitez vous faire?" 20 100 4 \
-    "LocalToLocal" "Sauvegarder source local sur destination locale" \
-    "LocalToDistant" "Sauvegarder source local sur destination distante" \
-    "DistantToDistant" "Sauvegarder source distante sur destination distante" \
-    "DistantToLocal" "Sauvegarder source distante sur destination locale" 2> $fichtemp
+        --menu "Bonjour $(whoami) : Que souhaitez vous faire?" 20 100 4 \
+        "LocalToLocal" "Sauvegarder source local sur destination locale" \
+        "LocalToDistant" "Sauvegarder source local sur destination distante" \
+        "DistantToDistant" "Sauvegarder source distante sur destination distante" \
+        "DistantToLocal" "Sauvegarder source distante sur destination locale" 2> $fichtemp
     valret=$?
     choix_backupDir=`cat $fichtemp`
     case $valret in
@@ -91,11 +131,11 @@ function backup() {
     fichtemp=`tempfile 2>/dev/null` || fichtemp=/tmp/projet$$
     trap "rm -f $fichtemp" 0 1 2 5 15
     $DIALOG --clear --title "Backup Choice" \
-    --menu "Bonjour $(whoami) : Que souhaitez vous faire?" 20 100 4 \
-    "LocalToLocal" "Sauvegarder source locale sur destination locale" \
-    "LocalToDistant" "Sauvegarder source locale sur destination distante" \
-    "DistantToDistant" "Sauvegarder source distante sur destination distante" \
-    "DistantToLocal" "Sauvegarder source distante sur destination locale" 2> $fichtemp
+        --menu "Bonjour $(whoami) : Que souhaitez vous faire?" 20 100 4 \
+        "LocalToLocal" "Sauvegarder source locale sur destination locale" \
+        "LocalToDistant" "Sauvegarder source locale sur destination distante" \
+        "DistantToDistant" "Sauvegarder source distante sur destination distante" \
+        "DistantToLocal" "Sauvegarder source distante sur destination locale" 2> $fichtemp
     valret=$?
     choix_backup=`cat $fichtemp`
     case $valret in
@@ -121,11 +161,11 @@ function choiceFolder() {
 
     case $? in
         0)
-        echo "\"$folder\" choisi";;
+            echo "\"$folder\" choisi";;
         1)
-        echo "Appuyé sur Annuler.";;
+            echo "Appuyé sur Annuler.";;
         255)
-        echo "Fenêtre fermée.";;
+            echo "Fenêtre fermée.";;
     esac
 }
 
@@ -138,34 +178,41 @@ function choiceFolder() {
 function connectSshfs() {
     fichtemp=`tempfile 2>/dev/null` || fichtemp=/tmp/projet$$
     trap "rm -f $fichtemp" 0 1 2 5 15
-    $DIALOG --title "$1" --clear \
-    --inputbox "$2:" 16 51 2> $fichtemp
+    if [[ $1 == "Password" ]]; then
+        $DIALOG --title "$1" --clear \
+            --passwordbox "$2:" 16 51 2> $fichtemp
+    else
+        $DIALOG --title "$1" --clear \
+            --inputbox "$2:" 16 51 2> $fichtemp
+    fi
 
     valret=$?
 
     case $valret in
         0)
-        echo "`cat $fichtemp`";;
+            echo "`cat $fichtemp`";;
         1)
-        echo "";;
+            echo "";;
         255)
-        if test -s $fichtemp ; then
-            cat $fichtemp
-        else
-            echo ""
-        fi
-        ;;
+            if test -s $fichtemp ; then
+                cat $fichtemp
+            else
+                echo ""
+            fi
+            ;;
     esac
 }
 
 function checkIfDistantFolderIsMount() {
     mount=`ls $1 2>/dev/null`
-    local folder=$1
     result=$?
+    local folder=$1
+    echo $result
     if [[ $result -eq 0 ]]; then
         echo "le dossier existe"
         if [ ${#folder[@]} -gt 0 ]; then
-            `sudo umount $1`
+            msgBox "Info Démontage" "On démonte le dossier $folder, s'il n'est pas fait"
+            `echo $passwordUser | sudo -S umount $1`
         fi
     else
         echo "le dossier n'existe pas"
@@ -182,13 +229,15 @@ function checkIfDistantFolderIsMount() {
     name=`connectSshfs "Name" "Donner votre nom de connection en ssh"`
     host=`connectSshfs "Host" "Donner votre adresse de connection en ssh"`
     folder=`connectSshfs "Folder" "Donner votre dossier de connection en ssh"`
+    pass=`connectSshfs "Password" "Donner votre mot de passe de connection en ssh"`
 
     echo "$port"
 
     if [[ $port != "" && $name != "" && $host != "" && $folder != "" ]]; then
-        mount=`sshfs -p$port $name@$host:$folder $1`
+        mount=`echo $pass | sshfs -p$port $name@$host:$folder $1 -o password_stdin`
         echo $mount
     fi
+    # Il faut gérer les erreurs de sshfs
 }
 
 checkIfDistantFolderIsMount "distantFolderOne"
@@ -205,12 +254,12 @@ function choiceFolderDistant() {
 
     case $? in
         0)
-        echo "\"$folder\" choisi";;
+            echo "\"$folder\" choisi";;
         1)
-        echo "Appuyé sur Annuler.";;
+            echo "Appuyé sur Annuler.";;
         255)
-        echo "Fenêtre fermée.";;
+            echo "Fenêtre fermée.";;
     esac
 }
 
-# umount=`umount distantFolderOne & umount distantFolderTwo`
+# umount=`umount distantFolderOne & umount distantFolderTwo & sudo rm -R sourceFolderOne sourceFolderTwo`
