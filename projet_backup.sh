@@ -49,7 +49,7 @@ if [ -z $DISPLAY ]
 then
     DIALOG=dialog
 else
-    DIALOG=Xdialog
+    DIALOG=dialog
 fi
 
 function msgBox() {
@@ -110,7 +110,7 @@ function backupDir() {
 
 
 function choiceFolder() {
-    local folder=`$DIALOG --stdout --title "Choisissez un dossier" --fselect ./$2 60 150`
+    folder=`$DIALOG --stdout --title "Choisissez un dossier $3" --fselect ./$2 20 60`
 
     if [[ $1 == "sourceFolderLocal" ]]; then
         sourceFolderLocal=$folder
@@ -127,9 +127,9 @@ function choiceFolder() {
         0)
         echo "\"$folder\" choisi";;
         1)
-        echo "Appuyé sur Annuler.";;
+        echo "Appuyé sur Annuler." && exit;;
         255)
-        echo "Fenêtre fermée.";;
+        echo "Fenêtre fermée." && exit;;
     esac
 }
 
@@ -209,17 +209,17 @@ function checkIfDistantFolderIsMount() {
 function conditionChoice() {
     backupDir
     if [[ $choix_backupDir == "LocalToLocal" ]]; then
-        choiceFolder "sourceFolderLocal"
-        choiceFolder "destinationFolderLocal"
+        choiceFolder "sourceFolderLocal" "" "Source"
+        choiceFolder "destinationFolderLocal" "" "Destination"
     elif [[ $choix_backupDir == "LocalToDistant" ]]; then
-        choiceFolder "sourceFolderLocal"
-        checkIfDistantFolderIsMount "destinationFolderDistant"
+        choiceFolder "sourceFolderLocal" "" "Source"
+        checkIfDistantFolderIsMount "destinationFolderDistant" "" "Destination"
     elif [[ $choix_backupDir == "DistantToDistant" ]]; then
-        checkIfDistantFolderIsMount "sourceFolderDistant"
-        checkIfDistantFolderIsMount "destinationFolderDistant"
+        checkIfDistantFolderIsMount "sourceFolderDistant" "" "Source"
+        checkIfDistantFolderIsMount "destinationFolderDistant" "" "Destination"
     elif [[ $choix_backupDir == "DistantToLocal" ]]; then
-        checkIfDistantFolderIsMount "sourceFolderDistant"
-        choiceFolder "destinationFolderLocal"
+        checkIfDistantFolderIsMount "sourceFolderDistant" "" "Source"
+        choiceFolder "destinationFolderLocal" "" "Destination"
     fi
 }
 
@@ -248,7 +248,9 @@ function compress() {
 }
 
 function sync() {
-    echo "sync"
+    yesOrNot "Synchronisation" "Démarrage de la synchronisation dans 2s après validation de cette fenêtre!"
+    sleep 2
+    c=`rsync -r -l -p -v -t -g -o -D -u $1 $2`
 }
 
 
@@ -269,7 +271,7 @@ function verifTypeBackupChoice() {
     if [[ $choixTypeBackup == "Compression" ]]; then
         compress $src $dest
     elif [[ $choixTypeBackup == "Synchronisation" ]]; then
-        sync
+        sync $src $dest
     fi
 
 }
