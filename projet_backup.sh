@@ -240,7 +240,11 @@ function typeBackup() {
 }
 
 function compress() {
-    echo "compress"
+    yesOrNot "Compression" "Démarrage de la compression dans 2s après validation de cette fenêtre!"
+    sleep 2
+    dateAndTime=`date +%d-%m-%Y_%H:%M`
+    c=`tar -czvf $2/backup_$dateAndTime.tar.gz $1 2>/dev/null`
+    msgBox "Compression Terminée" "Cool, la compression est finie!! :-D\nA bientôt"
 }
 
 function sync() {
@@ -263,7 +267,7 @@ function verifTypeBackupChoice() {
 
     typeBackup
     if [[ $choixTypeBackup == "Compression" ]]; then
-        compress
+        compress $src $dest
     elif [[ $choixTypeBackup == "Synchronisation" ]]; then
         sync
     fi
