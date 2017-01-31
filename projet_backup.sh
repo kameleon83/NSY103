@@ -1,9 +1,9 @@
 #!/bin/bash
 
-if [ "$EUID" -ne 0 ]
-then echo "Please run as root"
-exit
-fi
+# if [ "$EUID" -ne 0 ];then
+#     echo "Please run as root"
+#     exit
+# fi
 
 function checkDistib() {
     ARCH=$(uname -m | sed 's/x86_//;s/i[3-6]86/32/')
@@ -110,7 +110,7 @@ function backupDir() {
 
 
 function choiceFolder() {
-    local folder=`$DIALOG --stdout --title "Choisissez un dossier" --fselect / 60 150`
+    local folder=`$DIALOG --stdout --title "Choisissez un dossier" --fselect ./$2 60 150`
 
     if [[ $1 == "sourceFolderLocal" ]]; then
         sourceFolderLocal=$folder
@@ -168,65 +168,43 @@ function connectSshfs() {
 }
 
 function checkIfDistantFolderIsMount() {
-    local mount=`ls $1 2>/dev/null`
-    local result=$?
-    local folder=$1
+    mount=`ls $1 2>/dev/null`
+    result=$?
+    folder=$1
     echo $result
     if [[ $result -eq 0 ]]; then
-        echo "le dossier existe"
+        echo "le dossier existe $folder"
         if [ ${#folder[@]} -gt 0 ]; then
             msgBox "Info Démontage" "On démonte le dossier $folder, s'il n'est pas fait"
-            `sudo umount $1`
+            `sudo umount $folder 2>/dev/null`
         fi
     else
         echo "le dossier n'existe pas"
-        local mk=`sudo mkdir $1`
+        local mk=`mkdir $folder`
         result=$?
         if [[ $result != 0 ]]; then
             echo "Vérifie tes droits dans le dossier ou te trouve afin de créer un répertoire"
         else
-            echo "le dossier distantFolder a bien été créé"
+            echo "le dossier $folder a bien été créé"
         fi
     fi
 
     port=`connectSshfs "Port" "Donner votre port de connection en ssh"`
     name=`connectSshfs "Name" "Donner votre nom de connection en ssh"`
     host=`connectSshfs "Host" "Donner votre adresse de connection en ssh"`
-    folder=`connectSshfs "Folder" "Donner votre dossier de connection en ssh"`
+    dir=`connectSshfs "Folder" "Donner votre dossier de connection en ssh"`
     pass=`connectSshfs "Password" "Donner votre mot de passe de connection en ssh"`
 
     echo "$port"
 
-    if [[ $port != "" && $name != "" && $host != "" && $folder != "" && $pass != "" ]]; then
-        mount=`echo $pass | sshfs -p$port $name@$host:$folder $1 -o password_stdin`
+    if [[ $port != "" && $name != "" && $host != "" && $dir != "" && $pass != "" ]]; then
+        mount=`echo $pass | sshfs -p$port $name@$host:$dir $1 -o password_stdin`
         echo $mount
     fi
 
-    choiceFolder $1
+    choiceFolder $folder $folder
     # Il faut gérer les erreurs de sshfs
 }
-
-# checkIfDistantFolderIsMount "sourceFolderDistant"
-# checkIfDistantFolderIsMount "destinationFolderDistant"
-
-# function choiceFolderDistant() {
-#     folder=`$DIALOG --stdout --title "Choisissez un dossier" --fselect $HOME/ 60 150`
-#
-#     if [[ $1 == "sourceFolderLocal" ]]; then
-#         sourceFolderLocal=$folder
-#     elif [[ $1 == "destinationFolderLocal" ]]; then
-#         destinationFolderLocal=$folder
-#     fi
-#
-#     case $? in
-#         0)
-#         echo "\"$folder\" choisi";;
-#         1)
-#         echo "Appuyé sur Annuler.";;
-#         255)
-#         echo "Fenêtre fermée.";;
-#     esac
-# }
 
 function conditionChoice() {
     backupDir
@@ -235,7 +213,7 @@ function conditionChoice() {
         choiceFolder "destinationFolderLocal"
     elif [[ $choix_backupDir == "LocalToDistant" ]]; then
         choiceFolder "sourceFolderLocal"
-        checkIfDistantFolderIsMount "sourceFolderDistant"
+        checkIfDistantFolderIsMount "destinationFolderDistant"
     elif [[ $choix_backupDir == "DistantToDistant" ]]; then
         checkIfDistantFolderIsMount "sourceFolderDistant"
         checkIfDistantFolderIsMount "destinationFolderDistant"
@@ -261,14 +239,13 @@ function typeBackup() {
     esac
 }
 
-# function compress() {
-#     # sourceFolderLocal
-#     # destinationFolderLocal
-# }
-#
-# function sync() {
-#     #statements
-# }
+function compress() {
+    echo "compress"
+}
+
+function sync() {
+    echo "sync"
+}
 
 
 function verifTypeBackupChoice() {
@@ -284,19 +261,12 @@ function verifTypeBackupChoice() {
         dest=$destinationFolderDistant
     fi
 
-    echo "nbr_source_local : ${#sourceFolderLocal}"
-    echo "nbr_source_distant ; ${#sourceFolderDistant}"
-    echo "nbr_dest_local : ${#destinationFolderLocal}"
-    echo "nbr_dest_destination ; ${#destinationFolderDistant}"
-    echo "src : $src"
-    echo "dest : $dest"
-
-    # typeBackup
-    # if [[ $choixTypeBackup == "Compression" ]]; then
-    #     compress
-    # elif [[ $choixTypeBackup == "Synchronisation" ]]; then
-    #     sync
-    # fi
+    typeBackup
+    if [[ $choixTypeBackup == "Compression" ]]; then
+        compress
+    elif [[ $choixTypeBackup == "Synchronisation" ]]; then
+        sync
+    fi
 
 }
 
@@ -309,4 +279,4 @@ verifTypeBackupChoice
 
 
 
-# umount=`umount sourceFolderDistant & umount destinationFolderDistant & sudo rm -R sourceFolderOne sourceFolderTwo`
+# umount=`umount sourceFolderDistant & umount destinationFolderDistant && sudo rm -R sourceFolderDistant destinationFolderDistant`
