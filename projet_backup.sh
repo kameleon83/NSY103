@@ -49,7 +49,7 @@ if [ -z $DISPLAY ]
 then
     DIALOG=dialog
 else
-    DIALOG=dialog
+    DIALOG=Xdialog
 fi
 
 function msgBox() {
@@ -72,7 +72,7 @@ yesOrNot "Hello Guys" "Alors comment ça tu veux faire un backup ?"
 function installPackage() {
     for i in $1; do
         checkDistib
-        echo "Installation de $i dans 1s"
+        msgBox "Installation de $i dans 1s une fois valider"
         sleep 1
         if [[ ${OS} == "Debian" ]]; then
             x=`sudo apt-get --assume-yes install $i 2>/dev/null`
@@ -250,7 +250,8 @@ function compress() {
 function sync() {
     yesOrNot "Synchronisation" "Démarrage de la synchronisation dans 2s après validation de cette fenêtre!"
     sleep 2
-    c=`rsync -r -l -p -v -t -g -o -D -u $1 $2`
+    c=`rsync -arlpvtgoDu $1 $2`
+    msgBox "Synchronisation Terminée" "Cool, la synchronisation est finie!! :-D\nA bientôt"
 }
 
 
@@ -278,10 +279,6 @@ function verifTypeBackupChoice() {
 
 
 verifTypeBackupChoice
-
-
-
-
 
 
 
