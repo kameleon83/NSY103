@@ -1,2 +1,4 @@
-distantFolderOne
-distantFolderTwo
+sourceFolderDistant
+destinationFolderDistant
+rsync*
+compress*

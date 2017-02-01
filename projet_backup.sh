@@ -21,7 +21,6 @@ function checkDistib() {
 # On vérifie si Display est possible ( affichage plus sympathique )
 function checkPackageInstalled() {
     for p in $@; do
-        # echo $p
         checkDistib
         if [[ ${OS} == "Debian" ]]; then
             x=`dpkg -S $p 2> /dev/null`
@@ -42,7 +41,7 @@ function checkPackageInstalled() {
 
 
 Package=('dialog' 'xdialog' 'rsync' 'openssh' 'sshfs')
-# echo ${Package[@]}
+
 checkPackageInstalled ${Package[@]}
 
 if [ -z $DISPLAY ]
@@ -110,7 +109,7 @@ function backupDir() {
 
 
 function choiceFolder() {
-    folder=`$DIALOG --stdout --title "Choisissez un dossier $3" --fselect ./$2 20 60`
+    folder=`$DIALOG --stdout --title "Choisissez un dossier $3" --fselect ./$2 40 80`
 
     if [[ $1 == "sourceFolderLocal" ]]; then
         sourceFolderLocal=$folder
@@ -125,18 +124,13 @@ function choiceFolder() {
 
     case $? in
         0)
-        echo "\"$folder\" choisi";;
+        yesOrNot "Dossier Choisi" "$folder" && echo "\"$folder\"";;
         1)
         echo "Appuyé sur Annuler." && exit;;
         255)
         echo "Fenêtre fermée." && exit;;
     esac
 }
-
-# choiceFolder "sourceFolderLocal"
-# choiceFolder "destinationFolderLocal"
-# echo $sourceFolderLocal
-# echo $destinationFolderLocal
 
 
 function connectSshfs() {
@@ -156,14 +150,9 @@ function connectSshfs() {
         0)
         echo "`cat $fichtemp`";;
         1)
-        echo "";;
+        exit;;
         255)
-        if test -s $fichtemp ; then
-            cat $fichtemp
-        else
-            echo ""
-        fi
-        ;;
+        exit;;
     esac
 }
 
@@ -171,21 +160,18 @@ function checkIfDistantFolderIsMount() {
     mount=`ls $1 2>/dev/null`
     result=$?
     folder=$1
-    echo $result
+
     if [[ $result -eq 0 ]]; then
-        echo "le dossier existe $folder"
         if [ ${#folder[@]} -gt 0 ]; then
-            msgBox "Info Démontage" "On démonte le dossier $folder, s'il n'est pas fait"
-            `sudo umount $folder 2>/dev/null`
+            fus=`fusermount -u $folder 2>/dev/null`
         fi
     else
-        echo "le dossier n'existe pas"
         local mk=`mkdir $folder`
         result=$?
         if [[ $result != 0 ]]; then
-            echo "Vérifie tes droits dans le dossier ou te trouve afin de créer un répertoire"
+            msgBox "Erreur de droits" "Vérifie tes droits dans le dossier ou te trouve afin de créer un répertoire"
         else
-            echo "le dossier $folder a bien été créé"
+            msgBox "Dossier Créé" "le dossier $folder a bien été créé"
         fi
     fi
 
@@ -195,14 +181,12 @@ function checkIfDistantFolderIsMount() {
     dir=`connectSshfs "Folder" "Donner votre dossier de connection en ssh"`
     pass=`connectSshfs "Password" "Donner votre mot de passe de connection en ssh"`
 
-    echo "$port"
-
     if [[ $port != "" && $name != "" && $host != "" && $dir != "" && $pass != "" ]]; then
         mount=`echo $pass | sshfs -p$port $name@$host:$dir $1 -o password_stdin`
         echo $mount
     fi
 
-    choiceFolder $folder $folder
+    choiceFolder $folder $folder $3
     # Il faut gérer les erreurs de sshfs
 }
 
@@ -239,19 +223,70 @@ function typeBackup() {
     esac
 }
 
+
+function deleteFolder() {
+    if [[ -d $1 ]]; then
+        count=`ls $1 | wc -l`
+        if [[ $count == 0 ]]; then
+            yesOrNot "Suppression répertoire" "Le répertoire $1 créé\nà bien été démonter\nIl contient : $count fichier\nVeux tu le supprimer ?"
+            `rm -R $1`
+        else
+            msgBox "Erreur suppression" "Il y a une erreur lors\nde la suppression de $1.\nTu dois le faire manuellement avec\n 'rm -r $1'\nAvant vérifie bien qu'il n'y a plus\nde fichiers dedans !!!!!!"
+        fi
+    fi
+}
+
+function umountFolder() {
+    if [[ -d $1 ]]; then
+        yesOrNot "Démontage répertoire" "Le répertoire $1\ndoit-être démonter\nVeux tu le démonter ?"
+        `fusermount -u $1`
+        deleteFolder $1
+    else
+        msgBox "Problème de démontage" "Il y a une erreur lors\ndu démontage de $1.\nTu dois le faire manuellement avec\n 'fusermount -u $1'"
+    fi
+}
+
+function end() {
+    if [[ -d "sourceFolderDistant" ]]; then
+        umountFolder "sourceFolderDistant"
+    elif [[ -d "destinationFolderDistant" ]]; then
+        umountFolder "destinationFolderDistant"
+    fi
+}
+
+function checkErrors() {
+    err=`wc -l $1 | sed -e 's/[a-z _.]//g' | bc`
+    if [[ $err -gt 1 ]]; then
+        $DIALOG --begin 15 10 --tailbox $1  20 125
+    else
+        msgBox "Pas d'erreurs" "Sympa! Apparemment il n'y a pas d'erreurs!"
+    fi
+}
+
 function compress() {
-    yesOrNot "Compression" "Démarrage de la compression dans 2s après validation de cette fenêtre!"
-    sleep 2
+    yesOrNot "Compression" "Démarrage de la compression dans 1s après validation de cette fenêtre!"
+    sleep 1
     dateAndTime=`date +%d-%m-%Y_%H:%M`
-    c=`tar -czvf $2/backup_$dateAndTime.tar.gz $1 2>/dev/null`
-    msgBox "Compression Terminée" "Cool, la compression est finie!! :-D\nA bientôt"
+    tailboxRsync "compress.log" &
+    c=`tar -czvf $2/backup_$dateAndTime.tar.gz $1 1> compress.log 2> compress_errors.log`
+    msgBox "Compression Terminée" "La compression est finie!!\nLe nom du fichier s'appelle backup_$dateAndTime.tar.gz"
+    checkErrors "compress_errors.log"
+    end
+}
+
+function tailboxRsync() {
+    sleep 1
+    $DIALOG --begin 15 10 --tailbox $1  20 125
 }
 
 function sync() {
-    yesOrNot "Synchronisation" "Démarrage de la synchronisation dans 2s après validation de cette fenêtre!"
-    sleep 2
-    c=`rsync -arlpvtgoDu $1 $2`
-    msgBox "Synchronisation Terminée" "Cool, la synchronisation est finie!! :-D\nA bientôt"
+    yesOrNot "Synchronisation" "Démarrage de la synchronisation dans 1s après validation de cette fenêtre!"
+    sleep 1
+    tailboxRsync "rsync.log" &
+    c=`rsync -arlpvtgoDu --progress $1 $2 1> rsync.log 2> rsync_errors.log`
+    msgBox "Synchronisation Terminée" "La synchronisation est finie!!\n"
+    checkErrors "rsync_errors.log"
+    end
 }
 
 
@@ -279,7 +314,3 @@ function verifTypeBackupChoice() {
 
 
 verifTypeBackupChoice
-
-
-
-# umount=`umount sourceFolderDistant & umount destinationFolderDistant && sudo rm -R sourceFolderDistant destinationFolderDistant`
